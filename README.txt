@@ -1,0 +1,1 @@
+After programming need to reset esp and then restart terminal to receive serial printing.
