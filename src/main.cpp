@@ -6,15 +6,6 @@
 #include <ThingSpeak.h>
 #include <WiFi.h>
 
-
-const char* ssid = "Dovydoo";   
-const char* password = "0987654321";   // your network password
-
-WiFiClient  client;
-
-unsigned long myChannelNumber = 2;
-const char * myWriteAPIKey = "IR8FECNZANR3UUJ0";
-
 #define DEBUG_ENABLED
 #define SerialMonitor Serial
 #define SerialGPS Serial1
@@ -36,6 +27,14 @@ const char * myWriteAPIKey = "IR8FECNZANR3UUJ0";
 
 // For BME280
 #define SEALEVELPRESSURE_HPA (1013.25)
+
+#define CHANNEL_NUMBER 2
+#define CHANNEL_API_KEY "IR8FECNZANR3UUJ0"
+
+const char* ssid = "Dovydoo";   
+const char* password = "0987654321";   // your network password
+
+WiFiClient  client;
 
 void setupSPS();
 void setupBME();
@@ -68,9 +67,9 @@ void setup() {
 #ifdef DEBUG_ENABLED
   SerialMonitor.begin(115200);
 #endif
-  SerialGPS.begin(9600,SERIAL_8N1,RX1,TX1);
+  SerialGPS.begin(9600,SERIAL_8N1,RX1,TX1); // GPS UART
 
-  Wire.begin(SDA_PIN, SCL_PIN);
+  Wire.begin(SDA_PIN, SCL_PIN); //I2C
   setupSPS();
   setupBME();
 
@@ -97,13 +96,13 @@ void loop() {
     if (ret < 0) {
       DEBUG_PRINTLN("error reading measurement");
       ESP.restart();
-    } else {
+    } 
+    else {
       printSPSData();
-      //readBatteryVoltage();
+      readBatteryVoltage();
       readBME();
       
-// Send to ThinkSpeak
-        // Connect or reconnect to WiFi
+      // Connect or reconnect to WiFi
       if(WiFi.status() != WL_CONNECTED){
         DEBUG_PRINTLN("Attempting to connect");
         while(WiFi.status() != WL_CONNECTED){
@@ -112,16 +111,21 @@ void loop() {
         } 
         DEBUG_PRINTLN("\nConnected.");
       }
-      int x = ThingSpeak.writeField(myChannelNumber, 1, AllData.airData.mc_2p5, myWriteAPIKey);
-      if(x == 200){
-        DEBUG_PRINTLN("Channel update successful.");
-      }
-      else{
-        DEBUG_PRINTLN("Problem updating channel. HTTP error code " + String(x));
+      ThingSpeak.setField(1, AllData.airData.mc_1p0);
+      ThingSpeak.setField(2, AllData.airData.mc_2p5);
+      ThingSpeak.setField(3, AllData.airData.mc_10p0);
+      ThingSpeak.setField(4, AllData.temperature);
+      ThingSpeak.setField(5, AllData.humidity);
+      ThingSpeak.setField(6, AllData.battery_voltage);
+
+      int responseCode = ThingSpeak.writeFields(CHANNEL_NUMBER, CHANNEL_API_KEY);
+
+      if (responseCode == 200) {
+          DEBUG_PRINTLN("Fields updated successfuly.");
+      } else {
+          DEBUG_PRINTLN("Problem updating fields. HTTP error code " + String(responseCode));
       }
     }
-
-    // delay(1000);  // SPS measurement takes 1s
   }
 }
 
@@ -171,23 +175,21 @@ bool readGPS() {
       if (millis() > 5000 && GPS.statistics.chars < 10) {
         DEBUG_PRINTLN(F("No GPS detected: check wiring."));
       }
-
       return false;
     }
   }
-
   return false;
 }
 
 void readBatteryVoltage() {
   int ADCValue;
   float ADCVoltage;
-  ADCValue = analogRead(A0);                                 // Read adcvalue
-  ADCVoltage = ADCValue * 3.3 / 1023;                        // Convert value to voltage 0-3.3V
-  AllData.battery_voltage = ADCVoltage * (158.7 + 40) / 40;  // Convert voltage to 0-15.5
+  ADCValue = analogRead(1);                                 // Read adcvalue
+  ADCVoltage = ADCValue * 3.3 / 4095;                        // Convert from 0-4095 to 0-3.3 (to voltage) ESP32-C3 has 12bit ADCs
+  AllData.battery_voltage = ADCVoltage * (220 + 750) / 220;  // Compensate for the voltage divider
 
   DEBUG_PRINTF("ADC Value: %d\n\r", ADCValue);
-  DEBUG_PRINTF("Battery voltage: %f\n\r", AllData.battery_voltage);
+  DEBUG_PRINTF("Battery voltage: %f\n\rV", AllData.battery_voltage);
 }
 
 void readBME() {
