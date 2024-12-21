@@ -63,6 +63,13 @@ struct {
   float pressure;     // in hPa
 } AllData;
 
+hw_timer_t * timer = NULL; // Timer interrupt handler
+volatile bool timerFlag = false; // Volatile because it can change outside normal program execution (ISR)
+
+void IRAM_ATTR onTimer() { // Place ISR in IRAM for fast access
+  timerFlag = true;
+}
+
 void setup() {
 #ifdef DEBUG_ENABLED
   SerialMonitor.begin(115200);
@@ -75,22 +82,33 @@ void setup() {
 
   WiFi.mode(WIFI_STA);   
   ThingSpeak.begin(client); 
+  DEBUG_PRINTLN("Setup Complete");
+
+  // Initialize the timer
+  timer = timerBegin(0, 80, true); // Timer 0, prescaler 80, count up
+  timerAttachInterrupt(timer, onTimer, true); // Attach interrupt to timer
+  timerAlarmWrite(timer, 1000000, true); // Set alarm to trigger every 1 second (1 million microseconds)
+  timerAlarmEnable(timer); // Enable the timer alarm
 }
 
 void loop() {
   uint16_t ret;
   uint16_t data_ready = 0;
-  if (readGPS()) {
+  if(timerFlag){
+    timerFlag = 0;
+    readGPS();
+
     while (!data_ready or ret < 0) {             // Wait for sps30 new data
       ret = sps30_read_data_ready(&data_ready);  // Indicates that new (not yet retrieved) data is ready
       if (ret < 0) {
         DEBUG_PRINT("error reading data-ready flag: ");
         DEBUG_PRINTLN(ret);
+        ESP.restart();
       } else if (!data_ready) {
         DEBUG_PRINTLN("data not ready, no new measurement available");
       }
       delay(100);
-    };
+   };
 
     ret = sps30_read_measurement(&AllData.airData);
     if (ret < 0) {
@@ -101,13 +119,12 @@ void loop() {
       printSPSData();
       readBatteryVoltage();
       readBME();
-      
-      // Connect or reconnect to WiFi
+      //Connect or reconnect to WiFi
       if(WiFi.status() != WL_CONNECTED){
         DEBUG_PRINTLN("Attempting to connect");
         while(WiFi.status() != WL_CONNECTED){
           WiFi.begin(ssid, password); 
-          delay(5000);     
+          delay(100);     
         } 
         DEBUG_PRINTLN("\nConnected.");
       }
@@ -125,7 +142,7 @@ void loop() {
       } else {
           DEBUG_PRINTLN("Problem updating fields. HTTP error code " + String(responseCode));
       }
-    }
+    }  
   }
 }
 
@@ -185,7 +202,7 @@ void readBatteryVoltage() {
   int ADCValue;
   float ADCVoltage;
   ADCValue = analogRead(1);                                 // Read adcvalue
-  ADCVoltage = ADCValue * 3.3 / 4095;                        // Convert from 0-4095 to 0-3.3 (to voltage) ESP32-C3 has 12bit ADCs
+  ADCVoltage = ADCValue * 2.85 / 4095;                        // Convert from 0-4095 to 0-3.3 (to voltage) ESP32-C3 has 12bit ADCs
   AllData.battery_voltage = ADCVoltage * (220 + 750) / 220;  // Compensate for the voltage divider
 
   DEBUG_PRINTF("ADC Value: %d\n\r", ADCValue);
