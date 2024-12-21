@@ -96,8 +96,7 @@ void loop() {
   uint16_t data_ready = 0;
   if(timerFlag){
     timerFlag = 0;
-    readGPS();
-
+    //SPS30 Read
     while (!data_ready or ret < 0) {             // Wait for sps30 new data
       ret = sps30_read_data_ready(&data_ready);  // Indicates that new (not yet retrieved) data is ready
       if (ret < 0) {
@@ -116,6 +115,7 @@ void loop() {
       ESP.restart();
     } 
     else {
+      readGPS();
       printSPSData();
       readBatteryVoltage();
       readBME();
