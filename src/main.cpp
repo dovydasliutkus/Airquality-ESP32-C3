@@ -40,6 +40,7 @@ void setupSPS();
 void setupBME();
 // TODO: add readSPS();
 bool readGPS();
+void connectWifi();
 void readBatteryVoltage();
 void readBME();
 void printSPSData();
@@ -64,10 +65,10 @@ struct {
 } AllData;
 
 hw_timer_t * timer = NULL; // Timer interrupt handler
-volatile bool timerFlag = false; // Volatile because it can change outside normal program execution (ISR)
+volatile bool timerFlag = 0; // Volatile because it can change outside normal program execution (ISR)
 
 void IRAM_ATTR onTimer() { // Place ISR in IRAM for fast access
-  timerFlag = true;
+  timerFlag = 1;
 }
 
 void setup() {
@@ -82,13 +83,15 @@ void setup() {
 
   WiFi.mode(WIFI_STA);   
   ThingSpeak.begin(client); 
-  DEBUG_PRINTLN("Setup Complete");
+  connectWifi();
 
   // Initialize the timer
   timer = timerBegin(0, 80, true); // Timer 0, prescaler 80, count up
   timerAttachInterrupt(timer, onTimer, true); // Attach interrupt to timer
   timerAlarmWrite(timer, 1000000, true); // Set alarm to trigger every 1 second (1 million microseconds)
   timerAlarmEnable(timer); // Enable the timer alarm
+
+  DEBUG_PRINTLN("Setup Complete");
 }
 
 void loop() {
@@ -119,15 +122,8 @@ void loop() {
       printSPSData();
       readBatteryVoltage();
       readBME();
-      //Connect or reconnect to WiFi
-      if(WiFi.status() != WL_CONNECTED){
-        DEBUG_PRINTLN("Attempting to connect");
-        while(WiFi.status() != WL_CONNECTED){
-          WiFi.begin(ssid, password); 
-          delay(100);     
-        } 
-        DEBUG_PRINTLN("\nConnected.");
-      }
+      
+      connectWifi();
       ThingSpeak.setField(1, AllData.airData.mc_1p0);
       ThingSpeak.setField(2, AllData.airData.mc_2p5);
       ThingSpeak.setField(3, AllData.airData.mc_10p0);
@@ -138,12 +134,24 @@ void loop() {
       int responseCode = ThingSpeak.writeFields(CHANNEL_NUMBER, CHANNEL_API_KEY);
 
       if (responseCode == 200) {
-          DEBUG_PRINTLN("Fields updated successfuly.");
+          DEBUG_PRINTLN("Fields updated successfuly.\n\n\n");
       } else {
-          DEBUG_PRINTLN("Problem updating fields. HTTP error code " + String(responseCode));
+          DEBUG_PRINTLN("Problem updating fields. HTTP error code" + String(responseCode) + "\n\n\n");
       }
     }  
   }
+}
+
+void connectWifi() {
+ //Connect or reconnect to WiFi
+      if(WiFi.status() != WL_CONNECTED){
+        DEBUG_PRINTLN("Attempting to connect");
+        while(WiFi.status() != WL_CONNECTED){
+          WiFi.begin(ssid, password); 
+          delay(100);     
+        } 
+        DEBUG_PRINTLN("\nConnected.");
+      }
 }
 
 void setupSPS() {
@@ -203,10 +211,10 @@ void readBatteryVoltage() {
   float ADCVoltage;
   ADCValue = analogRead(1);                                 // Read adcvalue
   ADCVoltage = ADCValue * 2.85 / 4095;                        // Convert from 0-4095 to 0-3.3 (to voltage) ESP32-C3 has 12bit ADCs
-  AllData.battery_voltage = ADCVoltage * (220 + 750) / 220;  // Compensate for the voltage divider
+  AllData.battery_voltage = ADCVoltage * (10 + 43) / 10;  // Compensate for the voltage divider
 
   DEBUG_PRINTF("ADC Value: %d\n\r", ADCValue);
-  DEBUG_PRINTF("Battery voltage: %f\n\rV", AllData.battery_voltage);
+  DEBUG_PRINTF("Battery voltage: %f V\n\r", AllData.battery_voltage);
 }
 
 void readBME() {
@@ -216,7 +224,7 @@ void readBME() {
 
   DEBUG_PRINTF("Temperature = %f C ", AllData.temperature);
   DEBUG_PRINTF("Humidity: %f%% ", AllData.humidity);
-  DEBUG_PRINTF("Pressure: %f \n", AllData.pressure);
+  DEBUG_PRINTF("Pressure: %f hPa\n", AllData.pressure);
 }
 
 void printSPSData() {
@@ -242,7 +250,6 @@ void printSPSData() {
 
   DEBUG_PRINT("Typical particle size: ");
   DEBUG_PRINTLN(AllData.airData.typical_particle_size);
-  DEBUG_PRINTLN();
 }
 
 void printGPSInfo() {
