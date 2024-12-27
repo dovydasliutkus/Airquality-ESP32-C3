@@ -94,7 +94,7 @@ void setup() {
   // Initialize the timer
   timer = timerBegin(0, 80, true); // Timer 0, prescaler 80, count up
   timerAttachInterrupt(timer, onTimer, true); // Attach interrupt to timer
-  timerAlarmWrite(timer, 1000000, true); // Set alarm to trigger every 1 second (1 million microseconds)
+  timerAlarmWrite(timer, 2000000, true); // Set alarm to trigger every 1 second (1 million microseconds)
   timerAlarmEnable(timer); // Enable the timer alarm
 
   DEBUG_PRINTLN("Setup Complete");
@@ -104,10 +104,7 @@ void loop() {
   uint16_t ret;
   uint16_t data_ready = 0;
   if(timerFlag){
-    unsigned long currentTime = millis(); // Get the current time in milliseconds
-    Serial.print("Timer triggered at: ");
-    Serial.print(currentTime); // Print the timestamp
-    Serial.println(" ms");
+    DEBUG_PRINTF("LOOP START: %ld ms\n",millis());
     timerFlag = 0;
     //SPS30 Read
     while (!data_ready or ret < 0) {             // Wait for sps30 new data
@@ -132,12 +129,10 @@ void loop() {
         DEBUG_PRINTLN("Reading GPS");
         delay(100);
       }
-      ///readGPS();
-      //printGPSInfo();
       printSPSData();
       readBatteryVoltage();
       readBME();
-      
+      DEBUG_PRINTF("FINISHED ALL READS: %ld ms\n",millis());
       connectWifi();
       ThingSpeak.setField(1, AllData.airData.mc_1p0);
       ThingSpeak.setField(2, AllData.airData.mc_2p5);
@@ -153,6 +148,7 @@ void loop() {
       } else {
           DEBUG_PRINTLN("Problem updating fields. HTTP error code" + String(responseCode) + "\n\n");
       }
+      DEBUG_PRINTF("FINISHED UPLOAD: %ld ms\n",millis());
     }  
   }
 }
@@ -229,6 +225,7 @@ void setupGPS() {
 }
 
 // bool readGPS() {
+// // GPS read for NEOGPS library
 //   while (GPS.available(SerialGPS)) {
 //     GPS_fix = GPS.read();  // Read one byte and check if a GPS sentence is formed
 
@@ -248,7 +245,8 @@ void setupGPS() {
 //   return false;
 // }
 bool readGPS(){
-   if (myGNSS.getPVT() == true)
+  // GPS read with sparkfun library
+   if (myGNSS.getPVT() == true) // Returns true if new data is available
   {
     int32_t latitude = myGNSS.getLatitude();
     AllData.latitude = latitude / 10000000.0;
